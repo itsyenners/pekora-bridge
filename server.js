@@ -91,3 +91,25 @@ app.get('/v1/assets', async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Bridge rodando na porta ${PORT}`));
+
+// Catch-all: repassa qualquer outra rota direto pro Pekora real
+app.all('*', async (req, res) => {
+  try {
+    const targetUrl = `https://www.pekora.zip${req.originalUrl}`;
+    const response = await axios({
+      method: req.method,
+      url: targetUrl,
+      data: req.body,
+      headers: {
+        ...req.headers,
+        host: 'www.pekora.zip',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
+      },
+      validateStatus: () => true
+    });
+    res.status(response.status).send(response.data);
+  } catch (error) {
+    console.error('PROXY ERROR:', error.message);
+    res.status(502).send('Proxy failed');
+  }
+});
