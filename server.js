@@ -40,10 +40,16 @@ app.post('/v1/catalog/items/details', async (req, res) => {
   console.log('BODY RECEBIDO:', JSON.stringify(req.body));
   try {
     const pekoraResponse = await axios.post(
-      `${PEKORA_API_BASE}/v1/catalog/items/details`,
-      req.body
-    );
-
+  `${PEKORA_API_BASE}/v1/catalog/items/details`,
+  req.body,
+  {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+      'Accept': 'application/json',
+      'Content-Type': 'application/json'
+    }
+  }
+);
     console.log('RESPOSTA DO PEKORA:', JSON.stringify(pekoraResponse.data));
 
     const translatedData = pekoraResponse.data.data.map(item => mapPekoraToRoblox2020(item));
