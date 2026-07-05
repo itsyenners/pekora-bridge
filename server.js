@@ -37,6 +37,28 @@ app.get('/', (req, res) => {
 });
 
 app.post('/v1/catalog/items/details', async (req, res) => {
+  console.log('BODY RECEBIDO:', JSON.stringify(req.body));
+  try {
+    const pekoraResponse = await axios.post(
+      `${PEKORA_API_BASE}/v1/catalog/items/details`,
+      req.body
+    );
+
+    console.log('RESPOSTA DO PEKORA:', JSON.stringify(pekoraResponse.data));
+
+    const translatedData = pekoraResponse.data.data.map(item => mapPekoraToRoblox2020(item));
+
+    res.json({ data: translatedData });
+  } catch (error) {
+    console.error('ERRO DETALHADO:', error.response?.data || error.message);
+    res.status(500).json({ errors: [{ code: 0, message: "Bridge translation failed" }] });
+  }
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Bridge rodando na porta ${PORT}`));});
+
+app.post('/v1/catalog/items/details', async (req, res) => {
   try {
     const pekoraResponse = await axios.post(
       `${PEKORA_API_BASE}/v1/catalog/items/details`,
