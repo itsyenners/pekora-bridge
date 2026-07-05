@@ -96,6 +96,7 @@ app.listen(PORT, () => console.log(`Bridge rodando na porta ${PORT}`));
 app.all('*', async (req, res) => {
   try {
     const targetUrl = `https://www.pekora.zip${req.originalUrl}`;
+    console.log('PROXY PASSTHROUGH:', req.method, targetUrl);
     const response = await axios({
       method: req.method,
       url: targetUrl,
@@ -105,7 +106,8 @@ app.all('*', async (req, res) => {
         host: 'www.pekora.zip',
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
       },
-      validateStatus: () => true
+      validateStatus: () => true,
+      responseType: 'arraybuffer'
     });
     res.status(response.status).send(response.data);
   } catch (error) {
