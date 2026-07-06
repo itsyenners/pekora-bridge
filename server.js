@@ -2,6 +2,16 @@ const express = require('express');
 const axios = require('axios');
 const app = express();
 
+// Log em TODAS as requisições
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
+  console.log('Headers:', JSON.stringify(req.headers));
+  if (req.method !== 'GET' && req.body && Object.keys(req.body).length > 0) {
+    console.log('Body:', JSON.stringify(req.body));
+  }
+  next();
+});
+
 app.use(express.json());
 
 const PEKORA_API_BASE = 'https://catalog.pekora.zip';
@@ -37,7 +47,7 @@ app.get('/', (req, res) => {
 });
 
 app.post('/v1/catalog/items/details', async (req, res) => {
-  console.log('BODY RECEBIDO:', JSON.stringify(req.body));
+  console.log('>>> POST /v1/catalog/items/details');
   try {
     const pekoraResponse = await axios.post(
       `${PEKORA_API_BASE}/v1/catalog/items/details`,
@@ -50,18 +60,18 @@ app.post('/v1/catalog/items/details', async (req, res) => {
         }
       }
     );
-    console.log('RESPOSTA DO PEKORA:', JSON.stringify(pekoraResponse.data));
 
     const translatedData = pekoraResponse.data.data.map(item => mapPekoraToRoblox2020(item));
-
     res.json({ data: translatedData });
   } catch (error) {
-    console.error('ERRO DETALHADO:', error.response?.data || error.message);
+    console.error('ERRO /v1/catalog/items/details:', error.response?.data || error.message);
     res.status(500).json({ errors: [{ code: 0, message: "Bridge translation failed" }] });
   }
 });
 
 app.get('/v1/assets', async (req, res) => {
+  console.log('>>> GET /v1/assets');
+  console.log('Query params:', req.query);
   try {
     const { assetIds, size, format } = req.query;
 
@@ -79,8 +89,10 @@ app.get('/v1/assets', async (req, res) => {
     const imageUrl = pekoraResponse.data.data[0]?.imageUrl;
 
     if (imageUrl) {
+      console.log('Redirecting to:', imageUrl);
       res.redirect(302, imageUrl);
     } else {
+      console.log('Image not found');
       res.status(404).send('Image not found');
     }
   } catch (error) {
@@ -94,9 +106,9 @@ app.listen(PORT, () => console.log(`Bridge rodando na porta ${PORT}`));
 
 // Catch-all: repassa qualquer outra rota direto pro Pekora real
 app.all('*', async (req, res) => {
+  console.log('>>> CATCH-ALL:', req.method, req.originalUrl);
   try {
     const targetUrl = `https://www.pekora.zip${req.originalUrl}`;
-    console.log('PROXY PASSTHROUGH:', req.method, targetUrl);
     const response = await axios({
       method: req.method,
       url: targetUrl,
@@ -109,6 +121,7 @@ app.all('*', async (req, res) => {
       validateStatus: () => true,
       responseType: 'arraybuffer'
     });
+    console.log('CATCH-ALL response:', response.status);
     res.status(response.status).send(response.data);
   } catch (error) {
     console.error('PROXY ERROR:', error.message);
