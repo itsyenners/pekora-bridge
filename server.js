@@ -17,6 +17,82 @@ app.use((req, res, next) => {
   next();
 });
 
+// --- ClientSettings ---
+app.get('/clientsettingscdn/v1/client-version/:target', (req, res) => {
+  res.json({
+    clientVersionUpload: '1234567890',
+    bootstrapConfig: {
+      baseUrl: 'https://www.pekora.zip',
+      baseUrlWss: 'wss://www.pekora.zip',
+    }
+  });
+});
+
+app.get('/clientsettingscdn/v1/client-version', (req, res) => {
+  res.json({
+    clientVersionUpload: '1234567890',
+    bootstrapConfig: {
+      baseUrl: 'https://www.pekora.zip',
+      baseUrlWss: 'wss://www.pekora.zip',
+    }
+  });
+});
+
+app.get('/clientsettingscdn/*', (req, res) => {
+  return res.status(200).json({
+    clientVersionUpload: '1234567890',
+    bootstrapConfig: {
+      baseUrl: 'https://www.pekora.zip',
+      baseUrlWss: 'wss://www.pekora.zip',
+    }
+  });
+});
+
+// --- Locale ---
+app.get('/locale/v1/current', (req, res) => {
+  res.json({
+    localeId: 'pt-BR',
+    name: 'Português (Brasil)',
+    nativeName: 'Português (Brasil)',
+    isRecommended: true
+  });
+});
+
+app.get('/locale/v1/user', (req, res) => {
+  res.json({
+    localeId: 'pt-BR',
+    name: 'Português (Brasil)',
+    nativeName: 'Português (Brasil)',
+    isRecommended: true
+  });
+});
+
+app.get('/locale/*', (req, res) => {
+  return res.status(200).json({
+    localeId: 'pt-BR',
+    name: 'Português (Brasil)',
+    nativeName: 'Português (Brasil)',
+    isRecommended: true
+  });
+});
+
+// --- ECS v2 ---
+app.post('/ecsv2/v1/events', (req, res) => {
+  console.log('>>> POST /ecsv2/v1/events');
+  console.log('Body:', JSON.stringify(req.body));
+  return res.status(200).json({ ok: true });
+});
+
+app.post('/ecsv2/*', (req, res) => {
+  console.log('>>> POST /ecsv2/*');
+  console.log('Body:', JSON.stringify(req.body));
+  return res.status(200).json({ ok: true });
+});
+
+app.get('/ecsv2/*', (req, res) => {
+  return res.status(200).json({ ok: true });
+});
+
 // --- Rotas de usuário e perfil ---
 app.get('/apisite/users/v1/users/authenticated', (req, res) => {
   res.json({
@@ -197,19 +273,6 @@ app.get('/apisite/forums/v1/sub-category/:categoryId/posts', (req, res) => {
 
 app.get('/apisite/groups/v1/users/:userId/groups/roles', (req, res) => {
   res.json({ data: [] });
-});
-
-// --- Locale / ClientSettings / ECS ---
-app.all('/locale/*', (req, res) => {
-  return res.status(200).json({ ok: true });
-});
-
-app.all('/clientsettingscdn/*', (req, res) => {
-  return res.status(200).json({ ok: true });
-});
-
-app.all('/ecsv2/*', (req, res) => {
-  return res.status(200).json({ ok: true });
 });
 
 // --- Catch-all final ---
