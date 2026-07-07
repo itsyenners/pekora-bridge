@@ -4,7 +4,6 @@ const app = express();
 
 app.use(express.json());
 
-// Log em TODAS as requisições
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
   console.log('Headers:', JSON.stringify(req.headers));
@@ -15,6 +14,7 @@ app.use((req, res, next) => {
 });
 
 const PEKORA_API_BASE = 'https://catalog.pekora.zip';
+const THUMBNAILS_BASE = 'https://thumbnails.pekora.zip';
 
 function mapPekoraToRoblox2020(pekoraItem) {
   return {
@@ -46,15 +46,75 @@ app.get('/', (req, res) => {
   res.send('Pekora Bridge tá rodando!');
 });
 
-app.post('/v1/catalog/items/details', async (req, res) => {
-  console.log('>>> POST /v1/catalog/items/details');
+app.get('/apisite/users/v1/users/authenticated', (req, res) => {
+  res.json({
+    id: 11216,
+    name: 'cyprus',
+    displayName: 'cyprus',
+    isStaff: false
+  });
+});
+
+app.get('/apisite/users/v1/users/:userId/status', (req, res) => {
+  res.json({
+    status: 'Playing Korone Games!'
+  });
+});
+
+app.get('/apisite/accountinformation/v1/description', (req, res) => {
+  res.json({
+    description: 'hello from cyprus'
+  });
+});
+
+app.get('/apisite/auth/v1/usernames/validate', (req, res) => {
+  const username = (req.query.username || '').trim();
+  if (!username) {
+    return res.json({ code: 2, message: 'Username is not valid' });
+  }
+  return res.json({ code: 1, message: 'Success' });
+});
+
+app.get('/apisite/economy/v1/users/:userId/currency', (req, res) => {
+  res.json({
+    robux: 2197,
+    tickets: 499
+  });
+});
+
+app.get('/apisite/economy/v2/users/:userId/transactions', (req, res) => {
+  res.json({
+    data: [],
+    nextPageCursor: null
+  });
+});
+
+app.get('/apisite/inventory/v1/users/:userId/items/asset/:assetId/is-owned', (req, res) => {
+  res.status(200).send('');
+});
+
+app.get('/users/inventory/list-json', (req, res) => {
+  res.json({
+    data: [],
+    nextPageCursor: null
+  });
+});
+
+app.get('/users/profile/robloxcollections-json', (req, res) => {
+  res.json({
+    data: [],
+    nextPageCursor: null
+  });
+});
+
+app.post('/apisite/catalog/v1/catalog/items/details', async (req, res) => {
   try {
     const pekoraResponse = await axios.post(
       `${PEKORA_API_BASE}/v1/catalog/items/details`,
       req.body,
       {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+          'User-Agent': 'Mozilla/5.0',
           'Accept': 'application/json',
           'Content-Type': 'application/json'
         },
@@ -62,45 +122,111 @@ app.post('/v1/catalog/items/details', async (req, res) => {
       }
     );
 
-    const translatedData = (pekoraResponse.data.data || []).map(item => mapPekoraToRoblox2020(item));
+    const items = pekoraResponse.data.data || [];
+    const translatedData = items.map(item => mapPekoraToRoblox2020(item));
     res.json({ data: translatedData });
   } catch (error) {
-    console.error('ERRO /v1/catalog/items/details:', error.response?.data || error.message);
+    console.error('ERRO /apisite/catalog/v1/catalog/items/details:', error.response?.data || error.message);
     res.status(500).json({ errors: [{ code: 0, message: "Bridge translation failed" }] });
   }
 });
 
-app.get('/v1/assets', async (req, res) => {
-  console.log('>>> GET /v1/assets');
-  console.log('Query params:', req.query);
+app.post('/apisite/avatar/v1/avatar/set-wearing-assets', (req, res) => {
+  res.status(200).send('');
+});
+
+app.post('/apisite/avatar/v1/avatar/set-body-colors', (req, res) => {
+  res.status(200).send('');
+});
+
+app.get('/apisite/avatar/v1/avatar-rules', (req, res) => {
+  res.json({
+    rules: []
+  });
+});
+
+app.get('/apisite/thumbnails/v1/users/avatar', async (req, res) => {
   try {
-    const { assetIds, size, format } = req.query;
-
-    const pekoraResponse = await axios.get(
-      `https://thumbnails.pekora.zip/v1/assets`,
-      {
-        params: { assetIds, size, format },
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
-          'Accept': 'application/json'
-        },
-        timeout: 15000
-      }
-    );
-
-    const imageUrl = pekoraResponse.data.data?.[0]?.imageUrl;
-
-    if (imageUrl) {
-      console.log('Redirecting to:', imageUrl);
-      res.redirect(302, imageUrl);
-    } else {
-      console.log('Image not found');
-      res.status(404).send('Image not found');
-    }
+    const { userIds, size, format } = req.query;
+    const url = `${THUMBNAILS_BASE}/v1/users/avatar`;
+    const response = await axios.get(url, {
+      params: { userIds, size, format },
+      timeout: 15000
+    });
+    res.status(response.status).send(response.data);
   } catch (error) {
-    console.error('ERRO THUMBNAIL:', error.response?.data || error.message);
+    console.error('ERRO /apisite/thumbnails/v1/users/avatar:', error.message);
     res.status(500).send('Thumbnail bridge failed');
   }
+});
+
+app.get('/apisite/friends/v1/users/:userId/friends', (req, res) => {
+  res.json({ data: [] });
+});
+
+app.get('/apisite/friends/v1/my/friends/requests', (req, res) => {
+  res.json({ data: [], nextPageCursor: null });
+});
+
+app.get('/apisite/friends/v1/users/:userId/followers', (req, res) => {
+  res.json({ data: [], nextPageCursor: null });
+});
+
+app.get('/apisite/friends/v1/users/:userId/followings', (req, res) => {
+  res.json({ data: [], nextPageCursor: null });
+});
+
+app.get('/apisite/privatemessages/v1/messages', (req, res) => {
+  res.json({ data: [], nextPageCursor: null });
+});
+
+app.get('/games/getgameinstancesjson', (req, res) => {
+  res.json({
+    PlaceId: Number(req.query.placeId || 0),
+    ShowShutdownAllButton: false,
+    Collection: [],
+    TotalCollectionSize: 0
+  });
+});
+
+app.get('/game/get-join-script', (req, res) => {
+  res.json({
+    joinScriptUrl: '',
+    prefix: 'pekora-player',
+    retroArgs: '--authenticationUrl https://www.pekora.zip/Login/Negotiate.ashx'
+  });
+});
+
+app.get('/game/get-join-script-fromjobid', (req, res) => {
+  res.json({
+    joinScriptUrl: '',
+    prefix: 'pekora-player',
+    retroArgs: '--authenticationUrl https://www.pekora.zip/Login/Negotiate.ashx'
+  });
+});
+
+app.get('/apisite/games/v1/games/:gameId/game-passes', (req, res) => {
+  res.json({ data: [] });
+});
+
+app.post('/comments/post', (req, res) => {
+  res.status(200).send('');
+});
+
+app.get('/apisite/trades/v1/trades/inbound/count', (req, res) => {
+  res.json({ count: 0 });
+});
+
+app.get('/apisite/trades/v1/trades/:type', (req, res) => {
+  res.json({ data: [], nextPageCursor: null });
+});
+
+app.get('/apisite/forums/v1/sub-category/:categoryId/posts', (req, res) => {
+  res.json({ data: [], nextPageCursor: null });
+});
+
+app.get('/apisite/groups/v1/users/:userId/groups/roles', (req, res) => {
+  res.json({ data: [] });
 });
 
 app.all('*', (req, res) => {
