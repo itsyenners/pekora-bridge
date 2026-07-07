@@ -2,6 +2,8 @@ const express = require('express');
 const axios = require('axios');
 const app = express();
 
+app.use(express.json());
+
 // Log em TODAS as requisições
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
@@ -11,8 +13,6 @@ app.use((req, res, next) => {
   }
   next();
 });
-
-app.use(express.json());
 
 const PEKORA_API_BASE = 'https://catalog.pekora.zip';
 
@@ -57,11 +57,12 @@ app.post('/v1/catalog/items/details', async (req, res) => {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
           'Accept': 'application/json',
           'Content-Type': 'application/json'
-        }
+        },
+        timeout: 15000
       }
     );
 
-    const translatedData = pekoraResponse.data.data.map(item => mapPekoraToRoblox2020(item));
+    const translatedData = (pekoraResponse.data.data || []).map(item => mapPekoraToRoblox2020(item));
     res.json({ data: translatedData });
   } catch (error) {
     console.error('ERRO /v1/catalog/items/details:', error.response?.data || error.message);
@@ -82,11 +83,12 @@ app.get('/v1/assets', async (req, res) => {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
           'Accept': 'application/json'
-        }
+        },
+        timeout: 15000
       }
     );
 
-    const imageUrl = pekoraResponse.data.data[0]?.imageUrl;
+    const imageUrl = pekoraResponse.data.data?.[0]?.imageUrl;
 
     if (imageUrl) {
       console.log('Redirecting to:', imageUrl);
@@ -101,30 +103,34 @@ app.get('/v1/assets', async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Bridge rodando na porta ${PORT}`));
-
-// Catch-all: repassa qualquer outra rota direto pro Pekora real
-app.all('*', async (req, res) => {
+app.all('*', (req, res) => {
   console.log('>>> CATCH-ALL:', req.method, req.originalUrl);
-  try {
-    const targetUrl = `https://www.pekora.zip${req.originalUrl}`;
-    const response = await axios({
-      method: req.method,
-      url: targetUrl,
-      data: req.body,
-      headers: {
-        ...req.headers,
-        host: 'www.pekora.zip',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
-      },
-      validateStatus: () => true,
-      responseType: 'arraybuffer'
-    });
-    console.log('CATCH-ALL response:', response.status);
-    res.status(response.status).send(response.data);
-  } catch (error) {
-    console.error('PROXY ERROR:', error.message);
-    res.status(502).send('Proxy failed');
+
+  if (req.originalUrl.includes('/config.json')) {
+    return res.json({ ok: true });
   }
+
+  if (req.originalUrl.includes('/api/env')) {
+    return res.json({ ok: true });
+  }
+
+  if (req.originalUrl.includes('/settings.js')) {
+    return res.type('application/javascript').send('window.ok = true;');
+  }
+
+  if (req.originalUrl.includes('/v2/settings/') || req.originalUrl.includes('/client-settings/')) {
+    return res.json({
+      data: [],
+      message: 'ok'
+    });
+  }
+
+  if (req.originalUrl.includes('/v1/google/purchase') || req.originalUrl.includes('/v1/google/validate')) {
+    return res.json({ ok: true });
+  }
+
+  return res.status(200).send('Bridge OK');
 });
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, '0.0.0.0', () => console.log(`Bridge rodando na porta ${PORT}`));
