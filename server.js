@@ -2,308 +2,97 @@ const express = require('express');
 const axios = require('axios');
 const app = express();
 
-app.use(express.json());
+// Aumentar o limite do corpo da requisição para lidar com uploads se necessário
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Log detalhado de TODAS as requisições
+// Configurações de Domínio
+const BRIDGE_DOMAIN = 'pekorabridge.duckdns.org'; // Seu domínio DuckDNS
+const TARGET_API = 'api.pekora.zip';
+const TARGET_WWW = 'www.pekora.zip';
+
+// Log detalhado para Debugging
 app.use((req, res, next) => {
-  console.log('==== REQUEST ====');
-  console.log('METHOD:', req.method);
-  console.log('ORIGINAL URL:', req.originalUrl);
-  console.log('HOST:', req.headers.host);
-  console.log('QUERY:', JSON.stringify(req.query));
-  if (req.body && Object.keys(req.body).length > 0) {
-    console.log('BODY:', JSON.stringify(req.body));
-  }
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
   next();
 });
 
-// --- ClientSettings ---
-app.get('/clientsettingscdn/v1/client-version/:target', (req, res) => {
+// --- 1. Rotas de Configuração do Cliente (Essencial para o Join) ---
+app.get(['/clientsettingscdn/*', '/v1/client-version/*'], (req, res) => {
   res.json({
     clientVersionUpload: '1234567890',
     bootstrapConfig: {
-      baseUrl: 'https://www.pekora.zip',
-      baseUrlWss: 'wss://www.pekora.zip',
+      baseUrl: `https://${BRIDGE_DOMAIN}`,
+      baseUrlWss: `wss://${BRIDGE_DOMAIN}`,
     }
   });
 });
 
-app.get('/clientsettingscdn/v1/client-version', (req, res) => {
+// --- 2. Rotas de Join (Onde o jogo começa) ---
+app.get(['/game/get-join-script', '/game/get-join-script-fromjobid'], (req, res) => {
   res.json({
-    clientVersionUpload: '1234567890',
-    bootstrapConfig: {
-      baseUrl: 'https://www.pekora.zip',
-      baseUrlWss: 'wss://www.pekora.zip',
-    }
+    joinScriptUrl: '',
+    prefix: 'pekora-player',
+    // Apontando a autenticação para o nosso bridge para manter a sessão
+    retroArgs: `--authenticationUrl https://${BRIDGE_DOMAIN}/Login/Negotiate.ashx`
   });
 });
 
-app.get('/clientsettingscdn/*', (req, res) => {
-  return res.status(200).json({
-    clientVersionUpload: '1234567890',
-    bootstrapConfig: {
-      baseUrl: 'https://www.pekora.zip',
-      baseUrlWss: 'wss://www.pekora.zip',
-    }
-  });
-});
-
-// --- Locale ---
-app.get('/locale/v1/current', (req, res) => {
-  res.json({
-    localeId: 'pt-BR',
-    name: 'Português (Brasil)',
-    nativeName: 'Português (Brasil)',
-    isRecommended: true
-  });
-});
-
-app.get('/locale/v1/user', (req, res) => {
-  res.json({
-    localeId: 'pt-BR',
-    name: 'Português (Brasil)',
-    nativeName: 'Português (Brasil)',
-    isRecommended: true
-  });
-});
-
-app.get('/locale/*', (req, res) => {
-  return res.status(200).json({
-    localeId: 'pt-BR',
-    name: 'Português (Brasil)',
-    nativeName: 'Português (Brasil)',
-    isRecommended: true
-  });
-});
-
-// --- ECS v2 ---
-app.post('/ecsv2/v1/events', (req, res) => {
-  console.log('>>> POST /ecsv2/v1/events');
-  console.log('Body:', JSON.stringify(req.body));
-  return res.status(200).json({ ok: true });
-});
-
-app.post('/ecsv2/*', (req, res) => {
-  console.log('>>> POST /ecsv2/*');
-  console.log('Body:', JSON.stringify(req.body));
-  return res.status(200).json({ ok: true });
-});
-
-app.get('/ecsv2/*', (req, res) => {
-  return res.status(200).json({ ok: true });
-});
-
-// --- Rotas de usuário e perfil ---
+// --- 3. Mock de Dados Sociais/Economia (Para evitar erros de UI) ---
 app.get('/apisite/users/v1/users/authenticated', (req, res) => {
-  res.json({
-    id: 11216,
-    name: 'cyprus',
-    displayName: 'cyprus',
-    isStaff: false
-  });
+  res.json({ id: 11216, name: 'cyprus', displayName: 'cyprus', isStaff: false });
 });
 
-app.get('/apisite/users/v1/users/:userId/status', (req, res) => {
-  res.json({ status: 'Playing Korone Games!' });
-});
-
-app.get('/apisite/accountinformation/v1/description', (req, res) => {
-  res.json({ description: 'hello from cyprus' });
-});
-
-app.get('/apisite/auth/v1/usernames/validate', (req, res) => {
-  const username = (req.query.username || '').trim();
-  if (!username) {
-    return res.json({ code: 2, message: 'Username is not valid' });
-  }
-  return res.json({ code: 1, message: 'Success' });
-});
-
-// --- Economia ---
 app.get('/apisite/economy/v1/users/:userId/currency', (req, res) => {
   res.json({ robux: 2197, tickets: 499 });
 });
 
-app.get('/apisite/economy/v2/users/:userId/transactions', (req, res) => {
-  res.json({ data: [], nextPageCursor: null });
+app.get('/locale/*', (req, res) => {
+  res.json({ localeId: 'pt-BR', name: 'Português', nativeName: 'Português', isRecommended: true });
 });
 
-// --- Inventário ---
-app.get('/apisite/inventory/v1/users/:userId/items/asset/:assetId/is-owned', (req, res) => {
-  res.status(200).send('');
-});
+// --- 4. O PROXY TRANSPARENTE (Resolve o Loading Eterno) ---
+// Esta rota captura TUDO que não foi definido acima e busca no servidor original
+app.all('*', async (req, res) => {
+  // Determinar se vamos para api. ou www. (api. é o padrão recomendado)
+  const targetHost = req.originalUrl.startsWith('/apisite') || req.originalUrl.startsWith('/v1') ? TARGET_API : TARGET_API;
+  const targetUrl = `https://${targetHost}${req.originalUrl}`;
 
-app.get('/users/inventory/list-json', (req, res) => {
-  res.json({ data: [], nextPageCursor: null });
-});
+  console.log(`>>> PROXYING TO: ${targetUrl}`);
 
-app.get('/users/profile/robloxcollections-json', (req, res) => {
-  res.json({ data: [], nextPageCursor: null });
-});
-
-// --- Catálogo ---
-app.post('/apisite/catalog/v1/catalog/items/details', (req, res) => {
-  console.log('>>> POST /apisite/catalog/v1/catalog/items/details');
-  console.log('Body:', JSON.stringify(req.body));
-
-  const items = Array.isArray(req.body?.items) ? req.body.items : [];
-
-  const data = items.map((item) => ({
-    id: item.id,
-    itemType: item.itemType || 'Asset',
-    assetType: 8,
-    name: `Item ${item.id}`,
-    description: '',
-    productId: item.id,
-    genres: ['All'],
-    itemStatus: [],
-    itemRestrictions: [],
-    creatorHasVerifiedBadge: false,
-    creatorType: 'User',
-    creatorTargetId: 1,
-    creatorName: 'ROBLOX',
-    price: 0,
-    priceStatus: 'Free',
-    favoriteCount: 0,
-    offSaleDeadline: null,
-    saleLocationType: 'NotApplicable',
-    isForSale: true,
-    isPurchasable: true,
-    owned: false
-  }));
-
-  return res.json({ data });
-});
-
-// --- Avatar ---
-app.post('/apisite/avatar/v1/avatar/set-wearing-assets', (req, res) => {
-  res.status(200).send('');
-});
-
-app.post('/apisite/avatar/v1/avatar/set-body-colors', (req, res) => {
-  res.status(200).send('');
-});
-
-app.get('/apisite/avatar/v1/avatar-rules', (req, res) => {
-  res.json({ rules: [] });
-});
-
-app.get('/apisite/thumbnails/v1/users/avatar', async (req, res) => {
   try {
-    const { userIds, size, format } = req.query;
-    const response = await axios.get('https://thumbnails.pekora.zip/v1/users/avatar', {
-      params: { userIds, size, format },
-      timeout: 15000
+    const response = await axios({
+      method: req.method,
+      url: targetUrl,
+      headers: {
+        ...req.headers,
+        'host': targetHost, // Sobrescrever o host para o destino
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+        'accept-encoding': 'identity', // Evitar compressão que pode quebrar o repasse
+      },
+      data: req.body,
+      responseType: 'arraybuffer', // Crucial para Assets (Mapas, Sons, Imagens)
+      validateStatus: () => true, // Não travar em erros 404/500, apenas repassar
     });
+
+    // Repassar os cabeçalhos de resposta (Content-Type é o mais importante aqui)
+    Object.keys(response.headers).forEach(header => {
+      res.set(header, response.headers[header]);
+    });
+
     res.status(response.status).send(response.data);
   } catch (error) {
-    console.error('ERRO /apisite/thumbnails/v1/users/avatar:', error.response?.data || error.message);
-    res.status(500).send('Thumbnail bridge failed');
+    console.error(`!!! PROXY ERROR on ${req.originalUrl}:`, error.message);
+    res.status(502).json({ error: 'Proxy Failed', details: error.message });
   }
 });
 
-// --- Amigos / Social ---
-app.get('/apisite/friends/v1/users/:userId/friends', (req, res) => {
-  res.json({ data: [] });
+// Porta 10000 como padrão conforme seu teste de sucesso no Termux
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`=========================================`);
+  console.log(`PEKORA BRIDGE RODANDO NA PORTA ${PORT}`);
+  console.log(`DOMÍNIO: ${BRIDGE_DOMAIN}`);
+  console.log(`ALVO: ${TARGET_API}`);
+  console.log(`=========================================`);
 });
-
-app.get('/apisite/friends/v1/my/friends/requests', (req, res) => {
-  res.json({ data: [], nextPageCursor: null });
-});
-
-app.get('/apisite/friends/v1/users/:userId/followers', (req, res) => {
-  res.json({ data: [], nextPageCursor: null });
-});
-
-app.get('/apisite/friends/v1/users/:userId/followings', (req, res) => {
-  res.json({ data: [], nextPageCursor: null });
-});
-
-app.get('/apisite/privatemessages/v1/messages', (req, res) => {
-  res.json({ data: [], nextPageCursor: null });
-});
-
-// --- Jogos ---
-app.get('/games/getgameinstancesjson', (req, res) => {
-  res.json({
-    PlaceId: Number(req.query.placeId || 0),
-    ShowShutdownAllButton: false,
-    Collection: [],
-    TotalCollectionSize: 0
-  });
-});
-
-app.get('/game/get-join-script', (req, res) => {
-  res.json({
-    joinScriptUrl: '',
-    prefix: 'pekora-player',
-    retroArgs: '--authenticationUrl https://www.pekora.zip/Login/Negotiate.ashx'
-  });
-});
-
-app.get('/game/get-join-script-fromjobid', (req, res) => {
-  res.json({
-    joinScriptUrl: '',
-    prefix: 'pekora-player',
-    retroArgs: '--authenticationUrl https://www.pekora.zip/Login/Negotiate.ashx'
-  });
-});
-
-app.get('/apisite/games/v1/games/:gameId/game-passes', (req, res) => {
-  res.json({ data: [] });
-});
-
-app.post('/comments/post', (req, res) => {
-  res.status(200).send('');
-});
-
-// --- Trading ---
-app.get('/apisite/trades/v1/trades/inbound/count', (req, res) => {
-  res.json({ count: 0 });
-});
-
-app.get('/apisite/trades/v1/trades/:type', (req, res) => {
-  res.json({ data: [], nextPageCursor: null });
-});
-
-// --- Outros ---
-app.get('/apisite/forums/v1/sub-category/:categoryId/posts', (req, res) => {
-  res.json({ data: [], nextPageCursor: null });
-});
-
-app.get('/apisite/groups/v1/users/:userId/groups/roles', (req, res) => {
-  res.json({ data: [] });
-});
-
-// --- Catch-all final ---
-app.all('*', (req, res) => {
-  console.log('>>> CATCH-ALL:', req.method, req.originalUrl);
-
-  if (req.originalUrl.includes('/config.json')) {
-    return res.json({ ok: true });
-  }
-
-  if (req.originalUrl.includes('/api/env')) {
-    return res.json({ ok: true });
-  }
-
-  if (req.originalUrl.includes('/settings.js')) {
-    return res.type('application/javascript').send('window.ok = true;');
-  }
-
-  if (req.originalUrl.includes('/v2/settings/') || req.originalUrl.includes('/client-settings/')) {
-    return res.json({
-      data: [],
-      message: 'ok'
-    });
-  }
-
-  if (req.originalUrl.includes('/v1/google/purchase') || req.originalUrl.includes('/v1/google/validate')) {
-    return res.json({ ok: true });
-  }
-
-  return res.status(200).send('Bridge OK');
-});
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => console.log(`Bridge rodando na porta ${PORT}`));
